@@ -1,0 +1,106 @@
+---
+title: "Preliminary Data Analysis"
+format: 
+   html:
+    code-overflow: wrap
+    fig-width: 8
+    fig-height: 6
+---
+
+## Project Description:
+
+The data analysis will be conducted to evaluate the effect of zucchini planting date on the need for pollinator supplementation with managed bee hives. The data being used is unpublished and represents proportion analysis of bee visits over time. Dr. Ashley Leach, as co-PI, has been conducting experiments established across three field sites (Wooster, Willard, and Piketon). For this preliminary analysis, data from the Wooster site is being used, with additional site data to be incorporated in future analyses as it becomes available.
+
+Predictor (Categorical) Variables:
+
+1\. Planting Date (June 1 vs July 1) - proxy for bloom time
+
+2\. Pollination Treatment (With managed bumblebees vs Without supplementation)
+
+Response (Continuous) Variables:
+
+1\. Average number of fruit per plant (yield measure)
+
+2\. Average number of overall visits per flower per minute (pollination measure)
+
+#### Loading the dataset into R:
+
+```{r}
+rm(list=ls()) #clearing R's Brain
+
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+
+squash_bees_df <- read_excel("C:/Users/Rosita/OneDrive - The Ohio State University/Documents/AU 2025/Ent Tech&DataAnalysis/R_dataset1/Preliminary_data/pollinator_records.xlsx", sheet="Pollinator.Records", "A1:Q97" )
+
+summary(squash_bees_df)
+head(squash_bees_df)
+num_data <- nrow(squash_bees_df)
+print(num_data)
+squash_bees_df$treatment <- as.factor(squash_bees_df$treatment)
+str(squash_bees_df)
+
+
+yield_df <- read_excel("C:/Users/Rosita/OneDrive - The Ohio State University/Documents/AU 2025/Ent Tech&DataAnalysis/R_dataset1/Preliminary_data/yield_prelim.xlsx", sheet="yield_prelim", "A1:Q26")
+
+summary(yield_df)
+head(yield_df)
+yield_df$treatment <- as.factor(yield_df$treatment)
+str(yield_df)
+
+```
+
+### Plot of visits/flower/min as a function of treatment:
+
+```{r}
+plot(visits.flower.min~treatment, data= squash_bees_df, xlab= "Treatment", ylab="Visits/flower/min")
+
+
+ggplot(data=squash_bees_df, mapping=aes(x=treatment , y=visits.flower.min)) +
+geom_point()+theme_classic()+
+  xlab("Treatment")+
+  ylab("Visits/flower/min")
+
+```
+
+### Plot of visits/flower/min as a function of planting date (\~proxy for bloom date):
+
+```{r}
+plot(visits.flower.min~planting, data= squash_bees_df, xlab="Crop Cycle", ylab= "Visits/flower/min")
+
+ggplot(data=squash_bees_df, mapping=aes(x=planting, y=visits.flower.min)) +
+  geom_point()+theme_classic()+
+  scale_y_continuous(limits = c(0, 5), breaks = seq(0, 5, by = 1)) +
+  ylab("Visit/flower/minute")+
+  scale_x_continuous(limits = c(0, 3), breaks = seq(0, 3, by = 1),
+  expand=c(0,0))+
+  xlab("Crop Cycle")
+
+```
+
+### Plot of yield/plant as a function of treatment:
+
+```{r}
+plot(yield.plant~treatment, data= yield_df, xlab= "Treatment", ylab= "Yield/plant")
+
+ggplot(data=yield_df, mapping=aes(x=treatment, y=yield.plant)) +
+  geom_point()+theme_classic()
+
+```
+
+### Plot of yield/plant as a function of planting date (\~proxy for bloom date):
+
+```{r}
+plot(yield.plant~planting, data= yield_df, xlab= "Crop Cycle", ylab= "Yield/plant")
+
+ggplot(data=yield_df, mapping=aes(x=planting, y=yield.plant)) +
+  geom_point()+ theme_classic()+
+  scale_y_continuous(limits = c(0, 4), breaks = seq(0, 4, by = 0.25)) +
+  ylab("Yield/plant")+
+  scale_x_continuous(limits = c(0, 3), breaks = seq(0, 3, by = 1),
+  expand=c(0,0))+
+  xlab("Crop Cycle")
+
+```
