@@ -1,0 +1,400 @@
+---
+title: "Squash Bee Data Analysis"
+format: 
+   html:
+    code-overflow: wrap
+    fig-width: 8
+    fig-height: 6
+---
+
+## Project Description:
+
+The data analysis will be conducted to evaluate the effect of zucchini planting date on the need for pollinator supplementation with managed bee hives. The data being used is unpublished and represents proportion analysis of bee visits over time. Dr. Ashley Leach, as co-PI, has been conducting experiments established across three field sites (Wooster, Willard, and Piketon). For this preliminary analysis, data from the Wooster site is being used, with additional site data to be incorporated in future analyses as it becomes available.
+
+Predictor (Categorical) Variables:
+
+1\. Planting Date (June 1 vs July 1) - proxy for bloom time
+
+2\. Pollination Treatment (With managed bumblebees vs Without supplementation)
+
+Response (Continuous) Variables:
+
+1\. Average number of fruit per plant (yield measure)
+
+2\. Average number of overall visits per flower per minute (pollination measure)
+
+#### Loading the dataset into R:
+
+```{r}
+rm(list=ls()) #clearing R's Brain
+
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(readxl)
+library(ggplot2)
+library(ggpubr)
+
+bees_df <- read_excel("C:/Users/Rosita/OneDrive - The Ohio State University/Documents/AU 2025/Ent Tech&DataAnalysis/R_dataset1/Preliminary_data/pollinator_records.xlsx", sheet="Pollinator.Records", "A1:Q97" )
+
+str(bees_df)
+
+bees_df <- bees_df %>%
+  mutate(treatment = as.factor(treatment),
+  site = as.factor(site)) #Convert treatment & site
+
+str(bees_df$treatment)
+
+bees_df <- bees_df %>%
+  mutate(planting = factor(planting,
+  levels = c(1, 2),
+  labels = c("June 1", "July 1")))
+
+str(bees_df)
+
+head(bees_df %>% select(planting, treatment, site, visits.flower.min), 10)
+
+summary(bees_df)
+head(bees_df)
+num_data <- nrow(bees_df)
+print(num_data)
+str(bees_df)
+```
+
+```{r}
+yield_df <- read_excel("C:/Users/Rosita/OneDrive - The Ohio State University/Documents/AU 2025/Ent Tech&DataAnalysis/R_dataset1/Preliminary_data/yield_prelim.xlsx", sheet="yield_prelim", "A1:Q26")
+
+summary(yield_df)
+head(yield_df)
+yield_df$treatment <- as.factor(yield_df$treatment)
+str(yield_df)
+
+yield_df <- yield_df %>%  mutate(
+# Convert planting to factor
+planting = factor(planting,
+ levels = c(1, 2), 
+ labels = c("June 1", "July 1")),
+treatment = factor(treatment,
+ levels = c("not supplemented", "supplemented"),
+ labels = c("Not supplemented", "Supplemented")),
+# Convert site to factor
+site = as.factor(site),
+# Convert variables from character to numeric
+weight_harvest = as.numeric(weight_harvest),
+Cull_poll_weight = as.numeric(Cull_poll_weight),
+Cull_other_weight = as.numeric(Cull_other_weight),
+yield.plant_weight = as.numeric(yield.plant_weight))
+
+str(yield_df)
+table(yield_df$planting, yield_df$treatment)
+
+```
+
+
+### Model 1: Pollinator Visits (Linear Regression):
+
+```{r}
+summary(bees_df$visits.flower.min)
+hist(bees_df$visits.flower.min, breaks = 20, main = "Distribution of Visits per Flower per Minute")
+qqnorm(bees_df$visits.flower.min)
+
+
+#Fit linear regression model
+visits_model_lm <- lm(visits.flower.min ~ planting * treatment,
+                      data = bees_df)
+
+summary(visits_model_lm)
+anova(visits_model_lm)
+
+# Check assumptions
+par(mfrow = c(2, 2))
+plot(visits_model_lm)
+par(mfrow = c(1, 1))
+
+#Fit linear regression model
+visits_model_lm <- lm(visits.flower.min ~ planting * treatment,
+                      data = bees_df)
+library(car)
+#Fit linear regression model transformed
+visits_model_lm1 <- lm(sqrt(visits.flower.min) ~ planting * treatment,
+                      data = bees_df)
+
+summary(visits_model_lm1)
+Anova(visits_model_lm1, type="III")
+
+bees_df %>%
+  group_by(planting, treatment) %>%
+  summarise(
+    n = n(),
+    mean_visits = mean(visits.flower.min),
+    mean_sqrt = mean(sqrt(visits.flower.min)),
+    sd = sd(visits.flower.min),
+    se = sd / sqrt(n))
+
+# Estimated marginal means (back-transformed)
+library(emmeans)
+emm <- emmeans(visits_model_lm1, ~ planting * treatment, type = "response")
+emm
+pairs(emm)
+
+# Check assumptions
+par(mfrow = c(2, 2))
+plot(visits_model_lm)
+par(mfrow = c(1, 1))
+
+# Check homogeneity of variance
+library(car)
+leveneTest(sqrt(visits.flower.min) ~ planting * treatment, data = bees_df)
+
+# Visits summary
+visits_summary <- bees_df %>%
+  group_by(planting, treatment) %>%
+  summarise(
+    n = n(),
+    mean = mean(visits.flower.min, na.rm = TRUE),
+    sd = sd(visits.flower.min, na.rm = TRUE),
+    se = sd / sqrt(n),
+    .groups = "drop"
+  )
+print("=== VISITS SUMMARY ===")
+print(visits_summary)
+
+visits_plot <- ggplot(bees_df, aes(x = planting, y = visits.flower.min, 
+                                   fill = treatment)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, 
+               position = position_dodge(width = 0.8)) +
+  geom_point(aes(color = treatment),
+             position = position_jitterdodge(jitter.width = 0.2, 
+                                            dodge.width = 0.8),
+             size = 2, alpha = 0.6) +
+  stat_summary(fun = mean, geom = "point", 
+               shape = 18, size = 4, color = "black",
+               position = position_dodge(width = 0.8)) +
+  scale_fill_manual(values = c("Not supplemented" = "#ffd966",
+                                 "Supplemented" = "#8aa1d0")) +
+  scale_color_manual(values = c("Not supplemented" = "#ffd966",
+                                "Supplemented" = "#8aa1d0")) +
+  labs(x = "Planting Date",
+       y = "Visits per Flower per Minute",
+       title = "Effect of Planting Date and Bee Supplementation on Pollinator Visits",
+       fill = "Treatment",
+       color = "Treatment") +
+  theme_classic() +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 13, face = "bold"))
+
+print(visits_plot)
+
+```
+
+### MODEL 2: YIELD (LINEAR REGRESSION)
+
+```{r}
+summary(yield_df$yield.plant)
+hist(yield_df$yield.plant, breaks = 10,
+     main = "Distribution of Yield per Plant")
+
+# Fit linear model
+yield_model <- lm(yield.plant ~ planting * treatment, data = yield_df)
+
+summary(yield_model)
+anova(yield_model)
+
+# Check assumptions
+par(mfrow = c(2, 2))
+plot(yield_model)
+par(mfrow = c(1, 1))
+
+# Check normality
+shapiro.test(residuals(yield_model))
+
+# Yield summary
+yield_summary <- yield_df %>%
+  group_by(planting, treatment) %>%
+  summarise(
+    n = n(),
+    mean = mean(yield.plant, na.rm = TRUE),
+    sd = sd(yield.plant, na.rm = TRUE),
+    se = sd / sqrt(n),
+    .groups = "drop"
+  )
+print("=== YIELD SUMMARY ===")
+print(yield_summary)
+
+yield_plot <- ggplot(yield_df, aes(x = planting, y = yield.plant,
+                                   fill = treatment)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA,
+               position = position_dodge(width = 0.8)) +
+  geom_point(aes(color = treatment),
+             position = position_jitterdodge(jitter.width = 0.2,
+                                            dodge.width = 0.8),
+             size = 3, alpha = 0.7) +
+  stat_summary(fun = mean, geom = "point",
+               shape = 18, size = 4, color = "black",
+               position = position_dodge(width = 0.8)) +
+  scale_fill_manual(values = c("Not supplemented" = "#ffd966",
+                               "Supplemented" = "#8aa1d0")) +
+scale_color_manual(values = c("Not supplemented" = "#ffd966",
+                                "Supplemented" = "#8aa1d0")) +
+  labs(x = "Planting Date",
+       y = "Average Fruit per Plant",
+       title = "Effect of Planting Date and Bee Supplementation on Zucchini Yield",
+       fill = "Treatment",
+       color = "Treatment") +
+  theme_classic() +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 13, face = "bold"))
+
+print(yield_plot)
+
+```
+
+
+### Fit Yield linear model transformed:
+
+```{r}
+# Fit linear model
+yield_model1 <- lm(sqrt(yield.plant) ~ planting * treatment, data = yield_df)
+
+summary(yield_model1)
+anova(yield_model1)
+
+# Check assumptions
+par(mfrow = c(2, 2))
+plot(yield_model1)
+par(mfrow = c(1, 1))
+
+```
+#### --------------------------------------------------------------------------------------------------------------
+#### --------------------------------------------------------------------------------------------------------------
+### Plot of yield/plant as a function of treatment:
+
+```{r}
+plot(yield.plant~treatment, data= yield_df, xlab= "Treatment", ylab= "Yield/plant")
+
+ggplot(data=yield_df, mapping=aes(x=treatment, y=yield.plant)) +
+  geom_point()+theme_classic()
+
+```
+
+### Plot of yield/plant as a function of planting date (\~proxy for bloom date):
+
+```{r}
+plot(yield.plant~planting, data= yield_df, xlab= "Crop Cycle", ylab= "Yield/plant")
+
+ggplot(data=yield_df, mapping=aes(x=planting, y=yield.plant)) +
+  geom_point()+ theme_classic()+
+  scale_y_continuous(limits = c(0, 4), breaks = seq(0, 4, by = 0.25)) +
+  ylab("Yield/plant")+
+  scale_x_continuous(limits = c(0, 3), breaks = seq(0, 3, by = 1),
+  expand=c(0,0))+
+  xlab("Crop Cycle")
+
+```
+
+### Model 1: Pollinator Visits (Poisson Regression)
+
+```{r}
+
+summary(bees_df$visits.flower.min)
+hist(bees_df$visits.flower.min, breaks = 20, main = "Distribution of Visits per Flower per Minute")
+
+# Fit Poisson GLM
+visits_model <- glm(visits.flower.min ~ planting * treatment, data = bees_df, family = poisson(link = "log"))
+summary(visits_model)
+anova(visits_model, test = "Chisq")
+
+dispersion <- visits_model$deviance / visits_model$df.residual
+cat("Dispersion parameter:", dispersion, "\n")
+if(dispersion > 1.5) {
+  cat("WARNING: Overdispersion detected. Consider quasipoisson.\n")}
+
+# Diagnostic plots
+par(mfrow = c(2, 2))
+plot(visits_model)
+par(mfrow = c(1, 1))
+
+# Visits summary
+visits_summary <- bees_df %>%
+  group_by(planting, treatment) %>%
+  summarise(
+    n = n(),
+    mean = mean(visits.flower.min, na.rm = TRUE),
+    sd = sd(visits.flower.min, na.rm = TRUE),
+    se = sd / sqrt(n),
+    .groups = "drop"
+  )
+print("=== VISITS SUMMARY ===")
+print(visits_summary)
+
+visits_plot <- ggplot(bees_df, aes(x = planting, y = visits.flower.min, 
+                                   fill = treatment)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA, 
+               position = position_dodge(width = 0.8)) +
+  geom_point(aes(color = treatment),
+             position = position_jitterdodge(jitter.width = 0.2, 
+                                            dodge.width = 0.8),
+             size = 2, alpha = 0.6) +
+  stat_summary(fun = mean, geom = "point", 
+               shape = 18, size = 4, color = "black",
+               position = position_dodge(width = 0.8)) +
+  scale_fill_manual(values = c("Not supplemented" = "#ffd966",
+                                 "Supplemented" = "#8aa1d0")) +
+  scale_color_manual(values = c("Not supplemented" = "#ffd966",
+                                "Supplemented" = "#8aa1d0")) +
+  labs(x = "Planting Date",
+       y = "Visits per Flower per Minute",
+       title = "Effect of Planting Date and Bee Supplementation on Pollinator Visits",
+       fill = "Treatment",
+       color = "Treatment") +
+  theme_classic() +
+  theme(legend.position = "right",
+        axis.text = element_text(size = 11),
+        axis.title = element_text(size = 12),
+        plot.title = element_text(size = 13, face = "bold"))
+
+print(visits_plot)
+
+#Fit quasipoisson model
+visits_model_quasi <- glm(visits.flower.min ~ planting * treatment,
+                          data = bees_df,
+                          family = quasipoisson(link = "log"))
+
+summary(visits_model_quasi)
+anova(visits_model_quasi, test = "F")
+
+# Check dispersion
+dispersion <- summary(visits_model_quasi)$dispersion
+cat("Dispersion parameter:", dispersion, "\n")
+```
+
+### Plot of visits/flower/min as a function of treatment:
+
+```{r}
+ggplot(data= bees_df, mapping=aes(x=treatment , y=visits.flower.min)) +
+geom_boxplot(aes(fill= factor(treatment))) +
+  labs(title= "Grouped boxplot of visits/flower/min as a function of supplementation 
+       treatment")+
+  geom_point()+ theme_classic()+
+  stat_summary(fun = mean, geom = "point", size = 4, color = "black", shape = 18) +
+  scale_fill_manual(values = c("Supplemented" = "#8aa1d0", 
+                               "Not supplemented" = "#ffd966")) +
+  xlab("Treatment Type")+
+  ylab("Visits/flower/min")
+
+
+ggplot(data= bees_df, mapping=aes(x=treatment , y=visits.flower.min)) +
+geom_boxplot(aes(fill= factor(treatment)))+
+labs(title= "Grouped boxplot of visits/flower/min as a function of supplementation 
+       treatment")+
+geom_jitter(aes(color=factor(treatment)),position= position_jitterdodge(jitter.width = 0.2,
+dodge.width=0.75))+
+   scale_fill_manual(values = c("Supplemented" = "#8aa1d0", 
+                               "Not supplemented" = "#ffd966"))
+
+```
+
